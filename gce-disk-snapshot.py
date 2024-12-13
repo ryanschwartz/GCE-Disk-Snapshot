@@ -66,11 +66,11 @@ def cleanup_old_snapshots(snap_name,cycle_name):
     else:
       result = gcloud('compute','snapshots', 'list', '-r', '^' + snap_name + '-' + cycle_name + '-[0-9]{6}.*', '--uri')
   except Exception as ex:
-    set_last_error('GCloud execution error: %s' % ex.stderr)
+    set_last_error('GCloud execution error: %s' % ex.stderr.decode('utf-8'))
     write_log(last_error,syslog.LOG_ERR)
     return RESULT_ERR
   # Extract exactly the name of the snapshots
-  snapshot_list = result.stdout.strip().split('\n')
+  snapshot_list = result.stdout.strip().decode('utf-8').split('\\n')
   for iIndex in range(len(snapshot_list)):
     snapshot_list[iIndex] = os.path.splitext(os.path.basename(snapshot_list[iIndex]))[0]
   snapshot_list.sort(key=str.casefold)
@@ -80,7 +80,7 @@ def cleanup_old_snapshots(snap_name,cycle_name):
     try:
       result = gcloud('compute','snapshots', 'delete', '--quiet', snapshot_list[0])
     except Exception as ex:
-      set_last_error('GCloud execution error: %s' % ex.stderr)
+      set_last_error('GCloud execution error: %s' % ex.stderr.decode('utf-8'))
       write_log(last_error, syslog.LOG_ERR)
       return RESULT_ERR
     del snapshot_list[0]
@@ -98,7 +98,7 @@ def create_snapshot(disk_name,cycle_name,gc_zone):
     result = gcloud('compute', 'disks', 'snapshot', disk_name, '--async', '--snapshot-names', snapshot_name, '--zone', gc_zone)
     write_log('Snapshot created: ' + snapshot_name)
   except Exception as ex:
-    set_last_error('GCloud execution error: %s' % ex.stderr)
+    set_last_error('GCloud execution error: %s' % ex.stderr.decode('utf-8'))
     write_log(last_error,syslog.LOG_ERR)
     return RESULT_ERR
   return RESULT_OK
@@ -109,10 +109,10 @@ def get_gce_zones():
   try:
     result = gcloud('compute', 'zones', 'list', '--uri')
   except Exception as ex:
-    set_last_error('GCloud execution error: %s' % ex.stderr)
+    set_last_error('GCloud execution error: %s' % ex.stderr.decode('utf-8'))
     write_log(last_error,syslog.LOG_ERR)
   if result and result.stdout:
-    zone_list = result.stdout.strip().split('\n')
+    zone_list = result.stdout.strip().decode('utf-8').split('\\n')
     for iIndex in range(len(zone_list)):
       zone_list[iIndex] = os.path.splitext(os.path.basename(zone_list[iIndex]))[0]
   return zone_list
