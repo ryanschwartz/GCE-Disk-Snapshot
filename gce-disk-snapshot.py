@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 ## Usage:
 # gce-disk-snapshot.py [-h] -d DISK -z ZONE [-H HISTORY] [-s STATDIR]
@@ -40,7 +40,7 @@ status_filename=''
 last_error='Successful execution.'
 
 # SHELL commands
-gcloud = sh.Command('gcloud', ['/usr/bin','/usr/local/bin'])
+gcloud = sh.Command('gcloud', search_paths=['/usr/bin', '/usr/local/bin'])
 
 # CONSTANTS
 RESULT_OK = 0
@@ -54,7 +54,7 @@ def write_log(msg,msg_type=syslog.LOG_INFO):
   try:
     print(msg)
     syslog.syslog(msg_type, msg)
-  except Exception as ex:
+  except sh.ErrorReturnCode as ex:
     print ('Logging exception: %s' % ex)
 
 def cleanup_old_snapshots(snap_name,cycle_name):
@@ -73,7 +73,7 @@ def cleanup_old_snapshots(snap_name,cycle_name):
   snapshot_list = result.stdout.strip().split('\n')
   for iIndex in range(len(snapshot_list)):
     snapshot_list[iIndex] = os.path.splitext(os.path.basename(snapshot_list[iIndex]))[0]
-  snapshot_list.sort(key=str.lower)
+  snapshot_list.sort(key=str.casefold)
   # Do the cleanup
   while len(snapshot_list) > historic_snapshots:
     write_log('Removing snapshot "'+snapshot_list[0]+'" ...')
@@ -81,7 +81,7 @@ def cleanup_old_snapshots(snap_name,cycle_name):
       result = gcloud('compute','snapshots', 'delete', '--quiet', snapshot_list[0])
     except Exception as ex:
       set_last_error('GCloud execution error: %s' % ex.stderr)
-      write_log(last_error,syslog.LOG_ERR)
+      write_log(last_error, syslog.LOG_ERR)
       return RESULT_ERR
     del snapshot_list[0]
   return RESULT_OK
@@ -111,7 +111,7 @@ def get_gce_zones():
   except Exception as ex:
     set_last_error('GCloud execution error: %s' % ex.stderr)
     write_log(last_error,syslog.LOG_ERR)
-  if result is not None:
+  if result and result.stdout:
     zone_list = result.stdout.strip().split('\n')
     for iIndex in range(len(zone_list)):
       zone_list[iIndex] = os.path.splitext(os.path.basename(zone_list[iIndex]))[0]
@@ -120,7 +120,7 @@ def get_gce_zones():
 def save_status_file(filename, status):
   try:
     status_lines = []
-    status_lines.append('TIMESTAMP=' + str(long(time.time())))
+    status_lines.append('TIMESTAMP=' + str(int(time.time())))
     status_lines.append('STATUS=' + str(status))
     status_lines.append('LAST_ERROR=' + last_error.replace('\n','\t'))
     with open(filename, 'w') as status_file:
