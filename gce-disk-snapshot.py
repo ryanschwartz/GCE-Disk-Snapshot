@@ -4,7 +4,7 @@
 # gce-disk-snapshot.py [-h] -d DISK -z ZONE [-H HISTORY] [-s STATDIR]
 #
 # GCE Disk Snapshot Maker
-# 
+#
 # optional arguments:
 #   -h, --help                         show this help message and exit
 #   -d DISK, --disk DISK               Disk name
@@ -39,7 +39,6 @@ status_dir='/var/run/emind/gce-ds'
 status_filename=''
 last_error='Successful execution.'
 
-# SHELL commands
 gcloud = sh.Command('gcloud', search_paths=['/usr/bin', '/usr/local/bin'])
 
 # CONSTANTS
@@ -54,7 +53,7 @@ def write_log(msg,msg_type=syslog.LOG_INFO):
   try:
     print(msg)
     syslog.syslog(msg_type, msg)
-  except sh.ErrorReturnCode as ex:
+  except Exception as ex:
     print ('Logging exception: %s' % ex)
 
 def cleanup_old_snapshots(snap_name,cycle_name):
@@ -65,12 +64,12 @@ def cleanup_old_snapshots(snap_name,cycle_name):
       result = gcloud('compute','snapshots', 'list', '-r', '^' + snap_name + '-[0-9]{6}.*', '--uri')
     else:
       result = gcloud('compute','snapshots', 'list', '-r', '^' + snap_name + '-' + cycle_name + '-[0-9]{6}.*', '--uri')
-  except Exception as ex:
+  except sh.ErrorReturnCode as ex:
     set_last_error('GCloud execution error: %s' % ex.stderr.decode('utf-8'))
     write_log(last_error,syslog.LOG_ERR)
     return RESULT_ERR
   # Extract exactly the name of the snapshots
-  snapshot_list = result.stdout.strip().decode('utf-8').split('\\n')
+  snapshot_list = result.stdout.strip().decode('utf-8').split('\n')
   for iIndex in range(len(snapshot_list)):
     snapshot_list[iIndex] = os.path.splitext(os.path.basename(snapshot_list[iIndex]))[0]
   snapshot_list.sort(key=str.casefold)
@@ -112,7 +111,7 @@ def get_gce_zones():
     set_last_error('GCloud execution error: %s' % ex.stderr.decode('utf-8'))
     write_log(last_error,syslog.LOG_ERR)
   if result and result.stdout:
-    zone_list = result.stdout.strip().decode('utf-8').split('\\n')
+    zone_list = result.stdout.strip().decode('utf-8').split('\n')
     for iIndex in range(len(zone_list)):
       zone_list[iIndex] = os.path.splitext(os.path.basename(zone_list[iIndex]))[0]
   return zone_list
@@ -169,3 +168,4 @@ if result == RESULT_OK:
 save_status_file(status_filename,result)
 
 sys.exit(result)
+
