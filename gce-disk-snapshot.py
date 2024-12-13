@@ -52,10 +52,10 @@ def set_last_error(error_msg):
 
 def write_log(msg,msg_type=syslog.LOG_INFO):
   try:
-    print msg
+    print(msg)
     syslog.syslog(msg_type, msg)
   except Exception as ex:
-    print 'Logging exception: %s' % ex
+    print ('Logging exception: %s' % ex)
 
 def cleanup_old_snapshots(snap_name,cycle_name):
   # gcloud compute snapshots list -r ^prod-1-media-content-1a.* --uri
