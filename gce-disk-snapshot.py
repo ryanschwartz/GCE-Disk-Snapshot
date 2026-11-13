@@ -15,6 +15,7 @@
 #
 
 import os
+import re
 import sh
 import sys
 import time
@@ -44,6 +45,10 @@ gcloud = sh.Command('gcloud', search_paths=['/usr/bin', '/usr/local/bin'])
 # CONSTANTS
 RESULT_OK = 0
 RESULT_ERR = 1
+MAX_SNAPSHOT_NAME = 63
+SNAPSHOT_STAMP_FORMAT = '%Y%m%d-%H%M'
+SNAPSHOT_STAMP_LEN = 13
+
 
 def set_last_error(error_msg):
   global last_error
@@ -56,14 +61,38 @@ def write_log(msg,msg_type=syslog.LOG_INFO):
   except Exception as ex:
     print ('Logging exception: %s' % ex)
 
+def short_disk_name(disk, cycle):
+  # The snapshot name is '<disk>-<cycle>-<stamp>', or '<disk>-<stamp>' without a cycle.
+  max_disk_length = MAX_SNAPSHOT_NAME - SNAPSHOT_STAMP_LEN - 1
+  if cycle is not None:
+    max_disk_length -= len(cycle) + 1
+
+  if len(disk) <= max_disk_length:
+    return disk
+
+  parts = disk.split('-')
+  shortened_name = '-'.join(
+    part for part in parts
+    if not re.fullmatch(r'[a-z][0-9]{2}', part)
+    and not re.fullmatch(r'[a-z]{3}[0-9][a-z]', part)
+  )
+  if len(shortened_name) > max_disk_length:
+    return None
+  return shortened_name
+
 def cleanup_old_snapshots(snap_name,cycle_name):
   # gcloud compute snapshots list -r ^prod-1-media-content-1a.* --uri
   write_log('Performing cleanup ...')
+  snapshot_disk_name = short_disk_name(snap_name, cycle_name)
+  if snapshot_disk_name is None:
+    set_last_error('Unable to shorten the disk name enough to fit the GCP snapshot name limit.')
+    write_log(last_error,syslog.LOG_ERR)
+    return RESULT_ERR
   try:
     if cycle_name is None:
-      result = gcloud('compute','snapshots', 'list', '-r', '^' + snap_name + '-[0-9]{6}.*', '--uri')
+      result = gcloud('compute','snapshots', 'list', '-r', '^' + snapshot_disk_name + '-[0-9]{6}.*', '--uri')
     else:
-      result = gcloud('compute','snapshots', 'list', '-r', '^' + snap_name + '-' + cycle_name + '-[0-9]{6}.*', '--uri')
+      result = gcloud('compute','snapshots', 'list', '-r', '^' + snapshot_disk_name + '-' + cycle_name + '-[0-9]{6}.*', '--uri')
   except sh.ErrorReturnCode as ex:
     set_last_error('GCloud execution error: %s' % ex.stderr.decode('utf-8'))
     write_log(last_error,syslog.LOG_ERR)
@@ -87,12 +116,18 @@ def cleanup_old_snapshots(snap_name,cycle_name):
   # print snapshot_list
 
 def create_snapshot(disk_name,cycle_name,gc_zone):
+  snapshot_disk_name = short_disk_name(disk_name, cycle_name)
+  if snapshot_disk_name is None:
+    set_last_error('Unable to shorten the disk name enough to fit the GCP snapshot name limit.')
+    write_log(last_error, syslog.LOG_ERR)
+    return RESULT_ERR
+
   if cycle_name is None:
     write_log('Creating snapshot for disk "'+disk_name+'" ...')
-    snapshot_name = disk_name + '-' + time.strftime('%Y%m%d-%H%M')
+    snapshot_name = snapshot_disk_name + '-' + time.strftime(SNAPSHOT_STAMP_FORMAT)
   else:
     write_log('Creating '+cycle_name+' snapshot for disk "'+disk_name+'" ...')
-    snapshot_name = disk_name + '-' + cycle_name + '-' + time.strftime('%Y%m%d-%H%M')
+    snapshot_name = snapshot_disk_name + '-' + cycle_name + '-' + time.strftime(SNAPSHOT_STAMP_FORMAT)
   try:
     result = gcloud('compute', 'disks', 'snapshot', disk_name, '--async', '--snapshot-names', snapshot_name, '--zone', gc_zone)
     write_log('Snapshot created: ' + snapshot_name)
